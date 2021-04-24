@@ -98,7 +98,7 @@
 
   ![image-20210423210140500](C:\Users\Snowball\AppData\Roaming\Typora\typora-user-images\image-20210423210140500.png)
 
-  新增代码：
+  在loader.asm中新增代码：
 
   ```assembly
   ; Print "I am OK"
@@ -117,12 +117,16 @@
 
 2. 本实验不需要把内核装到SD卡上，因为本实验所运行的三个测试程序虽然需要通过内核来运行，但并不需要在树莓派上运行，把内核装到SD卡上是为了能把内核装载到树莓派上。这样，本实验在进行内核裁剪时就可以把与SD卡相关的驱动等移除或者改为模块，而模块是可以按需随时装入和卸下的，有助于减小内核大小。
 
-3. ![raspi setup](D:\桌面\raspi setup.png)
+3. 树莓派启动过程：
 
-   5. * qemu 在 `user mode` 配置方式下，可以运行跟当前平台指令集不同的平台可执行程序，跨指令集是 qemu 模拟器本身的一个特点(优势)，即可以用 `qemu-user` 在 x86 上运行 ARM 的可执行程序，只要两个平台是同一种操作系统，在这里就是 Linux。将一个 ARM 程序传入 qemu 模拟器中，qemu 把程序中的 ARM 指令翻译成 x86 指令(需要交叉编译环境)，然后在 x86 的CPU中执行。
+   ![raspi setup](D:\桌面\raspi setup.png)
 
-      * `user mode` 和 `system mode` 是 qemu 的两种配置方式。qemu 在 `system mode` 配置下模拟出整个计算机，可以在 qemu 上运行一个操作系统；qemu 在 `user mode` 配置方式下，可以运行跟当前平台指令集不同的平台可执行程序。`qemu-system` 用于模拟运行操作系统，`qemu-user` 则用于运行可执行用户程序。
+4. pass
 
-        
+5. * qemu 在 `user mode` 配置方式下，可以运行跟当前平台指令集不同的平台可执行程序，跨指令集是 qemu 模拟器本身的一个特点(优势)，即可以用 `qemu-user` 在 x86 上运行 ARM 的可执行程序，只要两个平台是同一种操作系统，在这里就是 Linux。将一个 ARM 程序传入 qemu 模拟器中，qemu 把程序中的 ARM 指令翻译成 x86 指令(需要交叉编译环境)，然后在 x86 的CPU中执行。
 
-        
+   * `user mode` 和 `system mode` 是 qemu 的两种配置方式。qemu 在 `system mode` 配置下模拟出整个计算机，可以在 qemu 上运行一个操作系统；qemu 在 `user mode` 配置方式下，可以运行跟当前平台指令集不同的平台可执行程序。`qemu-system` 用于模拟运行操作系统，`qemu-user` 则用于运行可执行用户程序。
+
+     
+
+     
