@@ -10,10 +10,10 @@
 
 <!-- GFM-TOC -->
 
-* [一、初始内存盘](##一、初始内存盘)
-* [二、Linux内核和执行测试程序](##二、Linux内核和执行测试程序)
-* [三、初识Boot](##三、初始Boot)
-* [四、思考题](##四、思考题)
+* [一、初始内存盘](https://github.com/LiangJuntao990113/OSH-2021-Labs/blob/main/lab1/docs/Lab1.md#%E4%B8%80%E5%88%9D%E5%A7%8B%E5%86%85%E5%AD%98%E7%9B%98)
+* [二、Linux内核和执行测试程序](https://github.com/LiangJuntao990113/OSH-2021-Labs/blob/main/lab1/docs/Lab1.md#%E4%BA%8Clinux-%E5%86%85%E6%A0%B8%E5%92%8C%E6%89%A7%E8%A1%8C%E6%B5%8B%E8%AF%95%E7%A8%8B%E5%BA%8F)
+* [三、初识Boot](https://github.com/LiangJuntao990113/OSH-2021-Labs/blob/main/lab1/docs/Lab1.md#%E4%B8%89%E5%88%9D%E8%AF%86boot)
+* [四、思考题](https://github.com/LiangJuntao990113/OSH-2021-Labs/blob/main/lab1/docs/Lab1.md#%E5%9B%9B%E6%80%9D%E8%80%83%E9%A2%98)
 
 <!-- GFM-TOC -->
 
