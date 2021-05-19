@@ -10,7 +10,7 @@ strace ./Desktop/Codes/C/shell
 
 得到以下输出：
 
-https://github.com/LiangJuntao990113/OSH-2021-Labs/blob/main/lab2/pictures/syscalls.png?raw=true
+![strace syscalls](https://github.com/LiangJuntao990113/OSH-2021-Labs/blob/main/lab2/pictures/syscalls.png)
 
 其中没有在我的 shell 代码中出现、在此出现次数较多的3个系统调用有 `mmap`，`mprotect`，`fstat` 。以下简述它们的功能：
 
