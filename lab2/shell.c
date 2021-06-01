@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <limits.h>
 
 #define MAX_ARG_LENGTH 32       /* max length of arg*/
 #define MAX_CMDLINE_LENGTH 1024 /* max cmdline length in a line*/
@@ -117,6 +118,21 @@ int FindOrient(char **argv)
     return -1;
 }
 
+size_t get_exe_name(char *processdir, char *processname, size_t len)
+{
+    /* 获取当前执行程序的文件名和路径 */
+    char *path_end;
+    if (readlink("/proc/self/exe", processdir, len) <= 0)
+        return -1;
+    path_end = strrchr(processdir, '/'); //查找指定字符在指定字符串中从最右边开始的第一次出现的位置
+    if (path_end == NULL)
+        return -1;
+    ++path_end;
+    strcpy(processname, path_end);
+    *path_end = '\0';
+    return (size_t)(path_end - processdir);
+}
+
 int execute(int argc, char **argv)
 {
     if (exec_builtin(argc, argv) == 0)
@@ -170,6 +186,28 @@ int execute(int argc, char **argv)
         close(fd);
         argv[orient] = NULL;
         argv[orient + 1] = NULL;
+    } //end orient if
+
+    if (strcmp(argv[0], "echo") == 0 && strcmp(argv[1], "$0") == 0)
+    {
+        //echo命令输出普通字符串时可以通过下面的execvp实现，这里针对“echo $0”命令
+        char path[PATH_MAX];
+        char processname[1024];
+        get_exe_name(path, processname, sizeof(path));
+        printf("%s%s\n", path, processname);
+        exit(0);
+    }
+    else if (strcmp(argv[0], "echo") == 0 && strcmp(argv[1], "$SHELL") == 0)
+    {
+        //echo命令输出普通字符串时可以通过下面的execvp实现，这里针对“echo $SHELL”命令
+        char *env = getenv("SHELL");
+        if (env == NULL)
+            exit(0);
+        else
+        {
+            printf("%s\n", env);
+            exit(0);
+        }
     }
     execvp(argv[0], argv); //argv[0]为要执行的程序, argv作为参数传递给该程序
     exit(0);
@@ -227,6 +265,8 @@ int main()
                     /* 没有管道的单一命令 */
                     char *argv[MAX_CMD_ARG_NUM];
                     int argc = split_string(commands[0], " ", argv);
+
+                    //printf("%s\n", argv[1]);
 
                     /* 在没有管道时，内置命令直接在主进程中完成，外部命令通过创建子进程完成 */
                     if (exec_builtin(argc, argv) == 0)
