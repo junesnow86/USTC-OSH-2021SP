@@ -8,12 +8,22 @@
 #include <signal.h>
 #include <limits.h>
 
-#define MAX_ARG_LENGTH 32       /* max length of arg*/
+#define MAX_ARG_LENGTH 512      /* max length of arg*/
 #define MAX_CMDLINE_LENGTH 1024 /* max cmdline length in a line*/
 #define MAX_BUF_SIZE 4096       /* max buffer size */
 #define MAX_CMD_ARG_NUM 32      /* max number of single command args */
 #define WRITE_END 1             // pipe write end
 #define READ_END 0              // pipe read end
+#define MAX_ALIAS_NUM 32
+
+typedef struct
+{
+    char origin[MAX_CMDLINE_LENGTH];
+    char alter[MAX_CMDLINE_LENGTH];
+} alias;
+
+alias all_alias[MAX_ALIAS_NUM];
+int alias_num = 0;
 
 /*  
     int split_string(char* string, char *sep, char** string_clips);
@@ -34,8 +44,13 @@ int split_string(char *string, char *sep, char **string_clips)
     string_clips[0] = strtok(string, sep); //根据传入的sep(分隔符)对字符串string进行拆解，string_clips[0]被赋值以第一个子串的首地址
     int clip_num = 0;                      //字符串片段的编号
 
+    int flag = 0; //如果首次检测到单引号则置1，第二次检测到单引号时清零
+    int clipnum_h, clipnum_t;
+
+    //printf("\nhere starts the split.\n");
     do
     {
+        //检测有没有成对的单引号，如果有，单引号之间的空格要忽略
         char *head, *tail;
         head = string_clips[clip_num];                    //一个片段的首地址
         tail = head + strlen(string_clips[clip_num]) - 1; //一个片段的末尾地址
@@ -48,8 +63,43 @@ int split_string(char *string, char *sep, char **string_clips)
         *(tail + 1) = '\0';            //清除完首尾的空格后在末尾加上‘\0’
         string_clips[clip_num] = head; //将清除首尾空格后的片段首地址存到string_clips[clip_num]中
 
+        char *sinquo = strchr(head, '\'');
+        if (sinquo != NULL) //在一个片段中检测到了单引号
+        {
+            if (flag == 0) //是一对单引号中的第一个
+            {
+                clipnum_h = clip_num;
+                flag = 1;
+                //printf("h=%d\n", clipnum_h);
+                //printf("%s\n", sinquo);
+            }
+            else //是一对单引号中的第二个
+            {
+                flag = 0;
+                clipnum_t = clip_num;
+                //printf("t=%d\n", clipnum_t);
+                char *new = (char *)malloc(sizeof(char) * MAX_ARG_LENGTH); //原来的string_clips[i]所指向的字符串不能连接新的字符串，需要重新用另一片空间来存
+                strcpy(new, string_clips[clipnum_h]);
+                //free(string_clips[clipnum_h]);
+                string_clips[clipnum_h] = new;
+                for (int j = clipnum_h + 1; j <= clipnum_t; ++j)
+                {
+                    //把一对单引号内的字符串重新连起来
+                    //printf("j=%d, %s\n", j, string_clips[j]);
+                    //printf("before: %s\n", string_clips[clipnum_h]);
+                    strcat(string_clips[clipnum_h], " "); //先连上一个空格
+                    //printf("middle: %s\n", string_clips[clipnum_h]);
+                    strcat(string_clips[clipnum_h], string_clips[j]);
+                    //printf("after: %s\n", string_clips[clipnum_h]);
+                    //free(string_clips[j]);
+                }
+                clip_num = clipnum_h;
+            }
+        }
         clip_num++;                                       //处理下一个字符串片段
     } while (string_clips[clip_num] = strtok(NULL, sep)); //若还有其他子字符串，继续while循环
+
+    //printf("here ends the split.\n");
     return clip_num;
 }
 
@@ -68,7 +118,7 @@ int exec_builtin(int argc, char **argv)
     {
         return 0;
     }
-    /* TODO: 添加和实现内置指令 */
+    /* 添加和实现内置指令 */
     if (strcmp(argv[0], "cd") == 0)
     {
         //执行cd命令
@@ -112,7 +162,7 @@ int FindOrient(char **argv)
     /* 从命令行参数数组中寻找定向符号">" ">>" "<"，返回其下标，若没找到则返回-1*/
     for (int i = 0; argv[i] != NULL; ++i)
     {
-        if (strcmp(argv[i], ">") == 0 || strcmp(argv[i], ">>") == 0 || strcmp(argv[i], "<") == 0)
+        if (strcmp(argv[i], ">") == 0 || strcmp(argv[i], ">>") == 0 || strcmp(argv[i], "<") == 0 || strcmp(argv[i], "<<") == 0 || strcmp(argv[i], "<<<") == 0)
             return i;
     }
     return -1;
@@ -133,82 +183,206 @@ size_t get_exe_name(char *processdir, char *processname, size_t len)
     return (size_t)(path_end - processdir);
 }
 
+int alias_cmd(char **argv)
+{
+    if (argv[1] == NULL)
+    {
+        //alias命令后不带任何参数，则打印当前所有的别名记录
+        //printf("alias_num=%d\n", alias_num);
+        for (int i = 0; i < alias_num; ++i)
+        {
+            printf("alias %s='%s'\n", all_alias[i].alter, all_alias[i].origin);
+        }
+    }
+    else
+    {
+        //alias后带参数，给指定命令需要设置别名
+        char *eq = strchr(argv[1], '='); //找到'='字符的位置
+        //复制字符串
+        strncpy(all_alias[alias_num].alter, argv[1], eq - argv[1]); //从'='往前将新的名称复制到alter
+        //printf("alter=%s\n", all_alias[alias_num].alter);
+        strncpy(all_alias[alias_num].origin, eq + 2, strlen(eq + 2) - 1); //从'='往后将原名称复制到origin
+        //printf("origin=%s\n", all_alias[alias_num].origin);
+        alias_num++;
+    }
+    //exit(0);
+    return 0;
+}
+
+/* 主要的执行指令的函数 */
 int execute(int argc, char **argv)
 {
+    /* 内置指令 */
     if (exec_builtin(argc, argv) == 0)
-    { //执行内置指令
+    {
         exit(0);
     }
-    /* 运行命令 */
-    /* TODO:支持基本的文件重定向 */
-    //if (argv[1] == ">" || argv[1] == ">>" || argv[1] == "<")
-    int orient = FindOrient(argv);
-    if (orient >= 0 && strcmp(argv[orient], ">") == 0)
-    {
 
-        //int fd = open(argv[2], O_RDWR);
-        //printf("%s\n%s\n", argv[1], argv[2]);
-        int fd = open(argv[orient + 1], O_RDWR);
-        if (fd == -1)
-        {
-            printf("open %s error!\n", argv[orient + 1]);
-            exit(2);
-        }
-        dup2(fd, STDOUT_FILENO); //将标准输出重定向到argv[2]文件中
-        close(fd);
-        //free(argv[1]);
-        //free(argv[2]);
-        argv[orient] = NULL; //这样操作会不会有安全隐患？
-        argv[orient + 1] = NULL;
-    }
-    else if (orient >= 0 && strcmp(argv[orient], ">>") == 0)
+    /* 运行命令 */
+    /* 支持基本的文件重定向 */
+    int orient = FindOrient(argv);
+    if (orient >= 0) //存在定向符号
     {
-        int fd = open(argv[orient + 1], O_RDWR | O_APPEND);
-        if (fd == -1)
+        if (strcmp(argv[orient], ">") == 0)
         {
-            printf("open %s error!\n", argv[orient + 1]);
-            exit(2);
+            int fd = open(argv[orient + 1], O_RDWR);
+            if (fd == -1)
+            {
+                printf("open %s error!\n", argv[orient + 1]);
+                exit(2);
+            }
+            dup2(fd, STDOUT_FILENO); //将标准输出重定向到argv[2]文件中
+            close(fd);
+            argv[orient] = NULL; //这样操作会不会有安全隐患？
+            argv[orient + 1] = NULL;
         }
-        dup2(fd, STDOUT_FILENO);
-        close(fd);
-        argv[orient] = NULL;
-        argv[orient + 1] = NULL;
-    }
-    else if (orient >= 0 && strcmp(argv[orient], "<") == 0)
-    {
-        int fd = open(argv[orient + 1], O_RDWR);
-        if (fd == -1)
+        else if (strcmp(argv[orient], ">>") == 0)
         {
-            printf("open %s error!\n", argv[orient + 1]);
-            exit(2);
+            int fd = open(argv[orient + 1], O_RDWR | O_APPEND);
+            if (fd == -1)
+            {
+                printf("open %s error!\n", argv[orient + 1]);
+                exit(2);
+            }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+            argv[orient] = NULL;
+            argv[orient + 1] = NULL;
         }
-        dup2(fd, STDIN_FILENO);
-        close(fd);
-        argv[orient] = NULL;
-        argv[orient + 1] = NULL;
+        else if (strcmp(argv[orient], "<") == 0)
+        {
+            int fd = open(argv[orient + 1], O_RDWR); //为argv[orient+1]所指的文件创建一个文件描述符
+            if (fd == -1)
+            {
+                printf("open %s error!\n", argv[orient + 1]);
+                exit(2);
+            }
+            dup2(fd, STDIN_FILENO); //将标准输入重定向到fd
+            close(fd);              //关闭文件描述符fd
+            argv[orient] = NULL;
+            argv[orient + 1] = NULL;
+        }
+        else if (strcmp(argv[orient], "<<") == 0)
+        {
+            FILE *file = fopen("redirection.txt", "w+");
+            while (1) //不断读入字符串，直到遇到结束标识符
+            {
+                printf(">");
+                char end[128];
+                strcpy(end, argv[orient + 1]);
+                strcat(end, "\n");
+                char temp[128];
+                fgets(temp, 128, stdin);
+                if (strcmp(temp, end) == 0)
+                    break;
+                else
+                    fputs(temp, file);
+            }
+            fclose(file);
+            int fd = open("redirection.txt", O_RDWR);
+            if (fd == -1)
+            {
+                printf("open redirection.txt error!\n");
+                exit(2);
+            }
+            dup2(fd, STDIN_FILENO); //将标准输入重定向到fd
+            close(fd);              //关闭文件描述符fd
+            //argv作为参数传给execvp时"cmd << ..."定向符和后面那段全部不要了
+            argv[orient] = NULL;
+            argv[orient + 1] = NULL;
+        }
+        else if (strcmp(argv[orient], "<<<") == 0)
+        {
+            FILE *file = fopen("redirection.txt", "w+");
+            fprintf(file, "%s\n", argv[orient + 1]);
+            fclose(file);
+            int fd = open("redirection.txt", O_RDWR);
+            if (fd == -1)
+            {
+                printf("open redirection.txt error!\n");
+                exit(2);
+            }
+            dup2(fd, STDIN_FILENO); //将标准输入重定向到fd
+            close(fd);              //关闭文件描述符fd
+            //argv作为参数传给execvp时"cmd << ..."定向符和后面那段全部不要了
+            argv[orient] = NULL;
+            argv[orient + 1] = NULL;
+        }
     } //end orient if
 
-    if (strcmp(argv[0], "echo") == 0 && strcmp(argv[1], "$0") == 0)
+    /* 支持echo $SHELL和echo ～root */
+    if (strcmp(argv[0], "echo") == 0)
     {
-        //echo命令输出普通字符串时可以通过下面的execvp实现，这里针对“echo $0”命令
-        char path[PATH_MAX];
-        char processname[1024];
-        get_exe_name(path, processname, sizeof(path));
-        printf("%s%s\n", path, processname);
-        exit(0);
-    }
-    else if (strcmp(argv[0], "echo") == 0 && strcmp(argv[1], "$SHELL") == 0)
-    {
-        //echo命令输出普通字符串时可以通过下面的execvp实现，这里针对“echo $SHELL”命令
-        char *env = getenv("SHELL");
-        if (env == NULL)
-            exit(0);
-        else
+        if (strcmp(argv[1], "$0") == 0)
         {
-            printf("%s\n", env);
+            //echo命令输出普通字符串时可以通过下面的execvp实现，这里针对“echo $0”命令
+            char path[PATH_MAX];
+            char processname[1024];
+            get_exe_name(path, processname, sizeof(path));
+            printf("%s%s\n", path, processname);
             exit(0);
         }
+        else if (strcmp(argv[1], "$SHELL") == 0)
+        {
+            //echo命令输出普通字符串时可以通过下面的execvp实现，这里针对“echo $SHELL”命令
+            char *env = getenv("SHELL");
+            if (env == NULL)
+                exit(0);
+            else
+            {
+                printf("%s\n", env);
+                exit(0);
+            }
+        }
+        else if (strchr(argv[1], '~') != NULL)
+        {
+            //echo命令的参数中带有'~'，该字符表示当前账户的home目录，等于环境变量HOME的值
+            if (strlen(argv[1]) == 1)
+            {
+                //参数中只有'~'一个字符
+                printf("%s\n", getenv("HOME"));
+                exit(0);
+            }
+            else if (strcmp(argv[1] + 1, "root") == 0)
+            {
+                printf("/root\n");
+                exit(0);
+            }
+            else if (strcmp(argv[1] + 1, "bin") == 0)
+            {
+                printf("/bin\n");
+                exit(0);
+            }
+        }
+    } //end echo if
+
+    /* 支持A=1 env */
+    if (argv[1] != NULL && strcmp(argv[1], "env") == 0)
+    {
+        char *eq = strchr(argv[0], '=');
+        if (eq == NULL)
+        {
+            printf("No such command.\n");
+            exit(0);
+        }
+        else
+        {
+            printf("%s\n", argv[0]);
+            char **argv_temp = &argv[1];
+            execvp(argv[1], argv_temp);
+            exit(0);
+        }
+    } //end env if
+
+    /* 支持alias*/
+    if (strcmp(argv[0], "alias") == 0)
+    {
+        //printf("%s %s\n", argv[0], argv[1]);
+        //alias_cmd(argv);
+        exit(6); //检测到alias命令后退出状态设置为6，在父进程中修改全局变量all_alias和alias_num
     }
+
+    /* 系统调用 */
     execvp(argv[0], argv); //argv[0]为要执行的程序, argv作为参数传递给该程序
     exit(0);
 }
@@ -228,11 +402,11 @@ int main()
 {
     int status;
     signal(SIGINT, handler); //注意！shell父进程和子进程中都要有signal()，父进程检测到Ctrl+C时输出一个换行符
-    while (1)                //shell
+
+    while (1) //shell
     {
         pid0 = fork(); //shell分出一个子进程
-        //printf("pid0 = %d\n", pid0);
-        if (pid0 == 0) //子进程负责读入和执行命令
+        if (pid0 == 0) //这是子进程，负责读入和执行命令
         {
             char cmdline[MAX_CMDLINE_LENGTH]; //存储键盘输入的命令行
             char *commands[128];              //由管道操作符'|'分割的命令行各个部分，每个部分是一条命令
@@ -240,6 +414,9 @@ int main()
 
             signal(SIGINT, handler); //当检测到Ctrl+C时退出pid0子进程
 
+            int status1;
+
+            /* 以下是一个死循环，不断等待读取命令和执行命令 */
             while (1)
             {
                 /*增加打印当前目录*/
@@ -248,9 +425,8 @@ int main()
                 printf("my_shell:%s$ ", buf);
                 fflush(stdout); //刷新stdout的输出缓冲区，把输出缓冲区里的东西强制打印到标准输出设备
 
-                fgets(cmdline, 256, stdin); //将stdin输入缓冲区中的一行存入cmdline中，最多存入(256-1)个字符
-                //printf("cmdline[0] = %d\n", cmdline[0]);
-                if (cmdline[0] == 0) //如果cmdline第一个字符为0,说明没有从输入缓冲区读入任何字符，说明遇到了Ctrl-D，退出并返回0表示退出shell
+                fgets(cmdline, 256, stdin); //将stdin输入缓冲区中的一行存入cmdline中，最多存入(256-1)个字符，可以读进换行符
+                if (cmdline[0] == 0)        //如果cmdline第一个字符为0,说明没有从输入缓冲区读入任何字符，说明遇到了Ctrl-D，退出并返回0表示退出shell
                     exit(0);
                 strtok(cmdline, "\n"); //将读入的cmdline根据'\n'进行分解，函数结束后cmdline变成原先字符串的第一个'\n'前的子串
 
@@ -264,9 +440,18 @@ int main()
                 {
                     /* 没有管道的单一命令 */
                     char *argv[MAX_CMD_ARG_NUM];
+                    //printf("alias_num=%d\n", alias_num);
+                    for (int k = 0; k < alias_num; ++k)
+                    {
+                        //printf("commands[0]=%s\n", commands[0]);
+                        if (strcmp(commands[0], all_alias[k].alter) == 0) //该命令是一个别名
+                        {
+                            //printf("here\n");
+                            strcpy(commands[0], all_alias[k].origin);
+                        }
+                        //printf("commands[0]=%s\n", commands[0]);
+                    }
                     int argc = split_string(commands[0], " ", argv);
-
-                    //printf("%s\n", argv[1]);
 
                     /* 在没有管道时，内置命令直接在主进程中完成，外部命令通过创建子进程完成 */
                     if (exec_builtin(argc, argv) == 0)
@@ -277,7 +462,13 @@ int main()
                     int pid = fork();
                     if (pid == 0) //子进程运行命令
                         execute(argc, argv);
-                    wait(NULL); //等待子进程运行外部命令结束后再继续shell程序
+                    waitpid(pid, &status1, 0); //等待子进程运行外部命令结束后再继续shell程序
+                    //printf("status1=%d\n", WEXITSTATUS(status1));
+                    if (WEXITSTATUS(status1) == 6)
+                    {
+                        //如果子进程的退出状态为6，说明遇到了alias命令，则在父进程中运行alias_cmd函数以添加别名记录
+                        alias_cmd(argv);
+                    }
                 }
                 else if (cmd_count == 2)
                 {
@@ -303,6 +494,13 @@ int main()
                            因此我们使用execute函数
                          */
                         char *argv[MAX_CMD_ARG_NUM];
+                        /*
+                        for (int k = 0; k < alias_num; ++k)
+                        {
+                            if (strcmp(commands[0], all_alias[alias_num].alter) == 0) //该命令是一个别名
+                                strcpy(commands[0], all_alias[alias_num].origin);
+                        }
+                        */
                         int argc = split_string(commands[0], " ", argv); //注意这里是commands[0]
                         execute(argc, argv);
 
@@ -321,6 +519,13 @@ int main()
                         close(pipefd[READ_END]);
 
                         char *argv[MAX_CMD_ARG_NUM];
+                        /*
+                        for (int k = 0; k < alias_num; ++k)
+                        {
+                            if (strcmp(commands[1], all_alias[alias_num].alter) == 0) //该命令是一个别名
+                                strcpy(commands[1], all_alias[alias_num].origin);
+                        }
+                        */
                         int argc = split_string(commands[1], " ", argv); //注意这里是commands[1]
                         execute(argc, argv);
 
@@ -369,6 +574,13 @@ int main()
 
                             /*处理参数，分出命令名和参数，并使用execute运行*/
                             char *argv[MAX_CMD_ARG_NUM];
+                            /*
+                            for (int k = 0; k < alias_num; ++k)
+                            {
+                                if (strcmp(commands[i], all_alias[alias_num].alter) == 0) //该命令是一个别名
+                                    strcpy(commands[i], all_alias[alias_num].origin);
+                            }
+                            */
                             int argc = split_string(commands[i], " ", argv); //注意是commands[i]
                             execute(argc, argv);
                             exit(255);
@@ -393,7 +605,7 @@ int main()
                 }         //end else
             }             //end while(1)
         }
-        else if (pid0 > 0) //shell父进程
+        else if (pid0 > 0) //这是shell父进程，父进程等待子进程结束
         {
             waitpid(pid0, &status, 0);
             if (status == 0)

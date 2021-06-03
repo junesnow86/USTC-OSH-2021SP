@@ -62,13 +62,29 @@ strace ./Desktop/Codes/C/shell
 
 ​		如上图所示，执行 `echo $SHELL` 命令后输出的是系统的 `SHELL` 变量的值，执行 `echo $0` 后显示当前执行的程序 shell 的路径和名称。
 
-2. `A=1 env`：我在网上翻看了很多介绍 `env` 命令的文章都没有看到过有人介绍这种用法，即使是在终端中使用 `env --help` 也没有相关介绍，在[官方文档](https://www.gnu.org/software/coreutils/env)中也没有相关介绍(也可能我看漏了...)，自己在终端中运行观察，推测该语法的作用是在打印环境变量信息时在首行加入 `A=1` (只能是这种赋值的形式，否则会报告找不到命令)，但并没有在环境变量中加入，在下一次执行 `env` 时首行的 `A=1` 会消失。
+2. `A=1 env`：我在网上翻看了很多介绍 `env` 命令的文章都没有看到过有人介绍这种用法，即使是在终端中使用 `env --help` 也没有相关介绍，在[官方文档](https://www.gnu.org/software/coreutils/env)中也没有相关介绍(也可能我看漏了...)，自己在终端中运行观察，推测该语法的作用是在打印环境变量信息时在首行加入 `A=1` (只能是这种赋值的形式，否则会报告找不到命令，如果所指定的"A"是现有的环境变量，则打印已存在的环境变量时'='后显示的是命令行中'='后指定的值)，但并没有在环境变量中加入，在下一次执行 `env` 时首行的 `A=1` 会消失。
 
 ![a=2333env](/home/snowball/Desktop/a=2333env.jpg)
 
-​		因此可以通过在执行 `env` 前简单地先打印前面的赋值语句来实现。
+​		因此可以通过在执行 `env` 前简单地先打印前面的赋值语句来实现。效果如下：
 
+![](/media/snowball/Data/USTC/OSH-2021/OSH-2021-Labs/lab2/pictures/A=233env.jpg)
 
+3. `alias ll='ls -l'`：设置指令的别名，若不加任何参数，则列出目前所有的别名设置，效力仅限于本次登入。实现效果如下图所示：
+
+   ![alias](/media/snowball/Data/USTC/OSH-2021/OSH-2021-Labs/lab2/pictures/alias.jpg)
+
+   能录入命令的别名、显示现有所有别名和执行别名所对应的命令。
+
+4. `echo ~root`：实现效果如下图所示：
+
+   ![echpo~](/media/snowball/Data/USTC/OSH-2021/OSH-2021-Labs/lab2/pictures/echo~.jpg)
+
+5. `<<` 和 `<<<` 重定向功能：通过创建一个 redirection.txt 文件，将多行/单行字符串写入该文件后将标准输入重定向到该文件来实现。实现效果如下图所示：
+
+   ![redirec](/media/snowball/Data/USTC/OSH-2021/OSH-2021-Labs/lab2/pictures/redirec.jpg)
+
+   ![redirec2](/media/snowball/Data/USTC/OSH-2021/OSH-2021-Labs/lab2/pictures/redirec2.jpg)
 
 
 
