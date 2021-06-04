@@ -7,6 +7,9 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <limits.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define MAX_ARG_LENGTH 512      /* max length of arg*/
 #define MAX_CMDLINE_LENGTH 1024 /* max cmdline length in a line*/
@@ -225,16 +228,44 @@ int execute(int argc, char **argv)
     {
         if (strcmp(argv[orient], ">") == 0)
         {
-            int fd = open(argv[orient + 1], O_RDWR);
-            if (fd == -1)
+            //实现 cmd > /dev/tcp/<host>/<port>
+            if (strstr(argv[orient + 1], "/dev/tcp/") != NULL)
             {
-                printf("open %s error!\n", argv[orient + 1]);
-                exit(2);
+                int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+                if (sockfd == 0)
+                {
+                    printf("socket failed.\n");
+                    exit(1);
+                }
+                char *tcpstr[128];
+                split_string(argv[orient + 1], "/", tcpstr);
+                struct sockaddr_in addr;
+                addr.sin_family = AF_INET;
+                addr.sin_addr.s_addr = inet_addr(tcpstr[2]);
+                addr.sin_port = htons(atoi(tcpstr[3]));
+                int ret = connect(sockfd, (const struct sockaddr *)&addr, sizeof(addr));
+                if (ret == -1)
+                {
+                    printf("connect failed.\n");
+                    exit(1);
+                }
+                dup2(sockfd, STDOUT_FILENO);
+                argv[orient] = NULL;
+                argv[orient + 1] = NULL;
             }
-            dup2(fd, STDOUT_FILENO); //将标准输出重定向到argv[2]文件中
-            close(fd);
-            argv[orient] = NULL; //这样操作会不会有安全隐患？
-            argv[orient + 1] = NULL;
+            else
+            {
+                int fd = open(argv[orient + 1], O_RDWR);
+                if (fd == -1)
+                {
+                    printf("open %s error!\n", argv[orient + 1]);
+                    exit(2);
+                }
+                dup2(fd, STDOUT_FILENO); //将标准输出重定向到argv[2]文件中
+                close(fd);
+                argv[orient] = NULL; //这样操作会不会有安全隐患？
+                argv[orient + 1] = NULL;
+            }
         }
         else if (strcmp(argv[orient], ">>") == 0)
         {
@@ -251,16 +282,44 @@ int execute(int argc, char **argv)
         }
         else if (strcmp(argv[orient], "<") == 0)
         {
-            int fd = open(argv[orient + 1], O_RDWR); //为argv[orient+1]所指的文件创建一个文件描述符
-            if (fd == -1)
+            //实现 cat < /dev/tcp/127.0.0.1/22
+            if (strstr(argv[orient + 1], "/dev/tcp/") != NULL)
             {
-                printf("open %s error!\n", argv[orient + 1]);
-                exit(2);
+                int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+                if (sockfd == 0)
+                {
+                    printf("socket failed.\n");
+                    exit(1);
+                }
+                char *tcpstr[128];
+                split_string(argv[orient + 1], "/", tcpstr);
+                struct sockaddr_in addr;
+                addr.sin_family = AF_INET;
+                addr.sin_addr.s_addr = inet_addr(tcpstr[2]);
+                addr.sin_port = htons(atoi(tcpstr[3]));
+                int ret = connect(sockfd, (const struct sockaddr *)&addr, sizeof(addr));
+                if (ret == -1)
+                {
+                    printf("connect failed.\n");
+                    exit(1);
+                }
+                dup2(sockfd, STDIN_FILENO);
+                argv[orient] = NULL;
+                argv[orient + 1] = NULL;
             }
-            dup2(fd, STDIN_FILENO); //将标准输入重定向到fd
-            close(fd);              //关闭文件描述符fd
-            argv[orient] = NULL;
-            argv[orient + 1] = NULL;
+            else
+            {
+                int fd = open(argv[orient + 1], O_RDWR); //为argv[orient+1]所指的文件创建一个文件描述符
+                if (fd == -1)
+                {
+                    printf("open %s error!\n", argv[orient + 1]);
+                    exit(2);
+                }
+                dup2(fd, STDIN_FILENO); //将标准输入重定向到fd
+                close(fd);              //关闭文件描述符fd
+                argv[orient] = NULL;
+                argv[orient + 1] = NULL;
+            }
         }
         else if (strcmp(argv[orient], "<<") == 0)
         {
