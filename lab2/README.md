@@ -68,7 +68,7 @@ strace ./Desktop/Codes/C/shell
 
 ​		因此可以通过在执行 `env` 前简单地先打印前面的赋值语句来实现。效果如下：
 
-![](/media/snowball/Data/USTC/OSH-2021/OSH-2021-Labs/lab2/pictures/A=233env.jpg)
+![A=2333env](/media/snowball/Data/USTC/OSH-2021/OSH-2021-Labs/lab2/pictures/A=233env.jpg)
 
 3. `alias ll='ls -l'`：设置指令的别名，若不加任何参数，则列出目前所有的别名设置，效力仅限于本次登入。实现效果如下图所示：
 
