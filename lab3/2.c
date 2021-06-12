@@ -25,11 +25,17 @@ struct Arg
     char *using;
 };
 
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
+
 void *handle_chat(void *data)
 {
     /*服务端的handle函数*/
     struct Pipe *pipe = (*(struct Arg *)data).pipe;
     char *using = (*(struct Arg *)data).using;
+    char login[] = "Welcome to chatting room!\n";
+    write(pipe->fd_send, login, sizeof(login));
+    printf("client%d has joined.\n", pipe->fd_send);
     char *buffer = (char *)malloc(sizeof(char) * MAX_MESSAGE_LENGTH);
     if (!buffer)
     {
@@ -40,7 +46,7 @@ void *handle_chat(void *data)
     while ((len = recv(pipe->fd_send, buffer, MAX_MESSAGE_LENGTH, 0)) > 0) //服务端接收来自一个客户端的数据，从fd_send接收数据并存到buffer中
     {
         //sleep(10);
-        printf("server has received a message: %s", buffer);
+        printf("server has received a message from client%d: %s", pipe->fd_send, buffer);
         char **message = (char **)malloc(sizeof(char *) * MAX_MESSAGE_NUM);
         if (!message)
         {
@@ -54,6 +60,11 @@ void *handle_chat(void *data)
             mesnum++;
             message[mesnum] = strtok(NULL, "\n");
         }
+        //下面向客户端发送消息
+        //如果多个这样的线程同时向客户端发送消息就会导致冲突，所以需要在这里加互斥锁
+        //这样就是允许多个客户端同时向服务端发送消息(因为每个线程都有一个buffer)
+        //但不允许服务器的多个线程同时向客户端发送消息
+        pthread_mutex_lock(&mutex);
         for (int i = 0; i < mesnum; ++i)
         {
             char *sendstr = (char *)malloc(sizeof(char) * (strlen(message[i]) + 32)); //+32是还要存“Message:”和一个换行符
@@ -70,6 +81,7 @@ void *handle_chat(void *data)
                     send(pipe->fd_recv[j], sendstr, strlen(sendstr), 0);
             free(sendstr);
         }
+        pthread_mutex_unlock(&mutex);
         /*
         for (int i = 0; i < mesnum; ++i)
             free(message[i]);
@@ -79,6 +91,7 @@ void *handle_chat(void *data)
     free(buffer);
     buffer = NULL;
     (*using) = '0';
+    printf("client%d has exited.\n", pipe->fd_send);
     return NULL;
 }
 
@@ -152,14 +165,14 @@ int main(int argc, char **argv)
     struct Arg arg;
     memset(using, 0, sizeof(char) * MAX_CLIENT_NUM);
     int i = 0;
-    while (1)
+    while (1) //不断接收来自客户端的请求
     {
         if (using[i] == '1')
         {
             i = (i + 1) % MAX_CLIENT_NUM;
             continue;
         }
-        userfd[i] = accept(fd, NULL, NULL);
+        userfd[i] = accept(fd, NULL, NULL); //接受客户端请求并返回一个文件描述符
         if (userfd[i] == -1)
         {
             perror("accept");
