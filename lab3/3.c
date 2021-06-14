@@ -13,6 +13,7 @@
 #define MAX_MESSAGE_LENGTH 1048576
 #define MAX_MESSAGE_NUM 512
 #define MAX_CLIENT_NUM 32
+#define SEND_BUFFER_LENGTH 4096
 
 struct Pipe
 {
@@ -47,9 +48,9 @@ int main(int argc, char **argv)
     }
 
     //TODO:利用IO复用技术实现多人聊天室
-    fd_set clients;
+    fd_set rdclients;   //可读clients
     fd_set clients_bak; //由于每次select之后会更新clients，因此需要backup
-    FD_ZERO(&clients);
+    FD_ZERO(&rdclients);
     FD_ZERO(&clients_bak);
     struct timeval timeout;
     int maxfd = 2; //最大文件描述符
@@ -59,20 +60,21 @@ int main(int argc, char **argv)
         perror("malloc");
         return 1;
     }
-    while (1)
+    while (1) //可以将该while循环看作一遍遍地扫描
     {
-        clients = clients_bak;
-        timeout.tv_sec = 3;                 //设置等待时间为1s
+        rdclients = clients_bak;            //目前在线的用户集合
+        timeout.tv_sec = 3;                 //设置等待时间为3s
         timeout.tv_usec = 0;                //在Linux中select函数会不断修改timeout的值，所以每次循环都应该重新赋值
-        int newfd = accept(fd, NULL, NULL); //若有新请求则接受
+        int newfd = accept(fd, NULL, NULL); //若有新请求则接受，但不会阻塞
         if (newfd == -1 && errno != EAGAIN)
         {
             perror("accept");
             return 1;
         }
-        if (newfd > 0)
+        //如果没有新的连接请求，就是newfd == -1 && errno == EAGAIN，这种情况不必理会，继续执行下面的代码
+        if (newfd > 0) //接受了新的用户加入
         {
-            FD_SET(newfd, &clients);
+            FD_SET(newfd, &rdclients);
             FD_SET(newfd, &clients_bak);
             if (newfd > maxfd)
                 maxfd = newfd;
@@ -81,21 +83,29 @@ int main(int argc, char **argv)
             printf("client%d has joined.\n", newfd);
         }
         int readnum;
-        if ((readnum = select(maxfd + 1, &clients, NULL, NULL, &timeout)) > 0)
+        if ((readnum = select(maxfd + 1, &rdclients, NULL, NULL, &timeout)) > 0) //有用户发送了消息
         {
             int count = 0;
-            printf("readnum=%d\n", readnum);
-            printf("maxfd=%d\n", maxfd);
+            //下面逐个处理用户发送的消息
             for (int fdi = 3; fdi <= maxfd && count < readnum; ++fdi)
             {
-                printf("here2\n");
-                if (FD_ISSET(fdi, &clients))
+                if (FD_ISSET(fdi, &rdclients)) //fdi属于可读套接字
                 {
+                    memset(buffer, 0, MAX_MESSAGE_LENGTH); //每次接收一个套接字的消息前先清空buffer
                     ssize_t len = recv(fdi, buffer, MAX_MESSAGE_LENGTH, 0);
+                    //printf("len=%d\n", len);
                     if (len > 0)
                     {
+                        char *recv_head = buffer;
+                        int len_left = MAX_MESSAGE_LENGTH;
+                        while (len >= SEND_BUFFER_LENGTH)
+                        {
+                            recv_head = recv_head + len;
+                            len_left = len_left - len;
+                            len = recv(fdi, recv_head, len_left, 0);
+                            //printf("len>=4096\n");
+                        }
                         //分割并向其他的客户端发送刚接收的消息
-                        printf("here3\n");
                         count++;
                         printf("server has received a message from client%d: %s", fdi, buffer);
                         char **message = (char **)malloc(sizeof(char *) * MAX_MESSAGE_NUM);
@@ -120,20 +130,29 @@ int main(int argc, char **argv)
                                 perror("malloc");
                                 exit(1);
                             }
-                            strcpy(sendstr, "Message:");
+                            memset(sendstr, 0, strlen(message[i]) + 32);
+                            sprintf(sendstr, "Message from %d: ", fdi);
                             strcat(sendstr, message[i]);
                             strcat(sendstr, "\n");
-                            for (int fdj = 3; fdj <= maxfd; ++fdj) //服务端向其他客户端发送刚接收的信息
+                            for (int fdj = 3; fdj <= maxfd; ++fdj) //服务端向其他在线的客户端发送刚接收的信息
+                            {
                                 if (fdj != fdi && FD_ISSET(fdj, &clients_bak))
                                     send(fdj, sendstr, strlen(sendstr), 0);
+                            }
                             free(sendstr);
                         }
+                    }
+                    else //len == 0说明该客户端已断开连接，比如按了Ctrl+C
+                    {
+                        printf("client%d has exited.\n", fdi);
+                        FD_CLR(fdi, &clients_bak);
+                        close(fdi);
                     }
                 }
             }
         }
         else
-            printf("here\n");
+            printf("there is no client texting\n");
     }
     return 0;
 }

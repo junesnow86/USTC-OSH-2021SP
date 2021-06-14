@@ -1,5 +1,4 @@
 /*本程序是一个服务端程序*/
-
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -8,8 +7,9 @@
 #include <netinet/in.h>
 #include <pthread.h>
 
-#define MAX_MESSAGE_LENGTH 1048576
-#define MAX_MESSAGE_NUM 512
+#define MAX_MESSAGE_LENGTH 1048576 //一次recv最多可接收1MiB的消息
+#define MAX_MESSAGE_NUM 512        //一次recv的信息最多可以被分割成的消息条数
+#define SEND_BUFFER_LENGTH 4096    //发送缓冲的大小
 
 struct Pipe
 {
@@ -21,7 +21,6 @@ void *handle_chat(void *data)
 {
     /*服务端的handle函数*/
     struct Pipe *pipe = (struct Pipe *)data;
-    //char buffer[1024] = "Message:";
     char *buffer = (char *)malloc(sizeof(char) * MAX_MESSAGE_LENGTH);
     if (!buffer)
     {
@@ -29,9 +28,21 @@ void *handle_chat(void *data)
         exit(1);
     }
     ssize_t len;
-    while ((len = recv(pipe->fd_send, buffer, MAX_MESSAGE_LENGTH, 0)) > 0) //服务端接收来自一个客户端的数据，从fd_send接收数据并存到buffer中，这里buffer+8是从“Message”后开始接收字符串
+    //while ((len = recv(pipe->fd_send, buffer, MAX_MESSAGE_LENGTH, 0)) > 0)
+    while (1)
     {
-        sleep(10);
+        //sleep(10);
+        len = recv(pipe->fd_send, buffer, MAX_MESSAGE_LENGTH, 0); //服务端接收来自一个客户端(fd_send)的数据并存到buffer中，len为实际接收到的字节数
+        if (len <= 0)
+            break;
+        char *recv_head = buffer;
+        int len_left = MAX_MESSAGE_LENGTH;
+        while (len >= SEND_BUFFER_LENGTH) //实际接收的字节数>=发送缓冲大小，可能是一条长消息，客户端一次send发送不完，需要继续调用recv
+        {
+            recv_head = recv_head + len;
+            len_left = len_left - len;
+            len = recv(pipe->fd_send, recv_head, len_left, 0);
+        }
         char **message = (char **)malloc(sizeof(char *) * MAX_MESSAGE_NUM);
         if (!message)
         {
@@ -47,7 +58,7 @@ void *handle_chat(void *data)
         }
         for (int i = 0; i < mesnum; ++i)
         {
-            char *sendstr = (char *)malloc(sizeof(char) * (strlen(message[i]) + 32)); //+32是还要存“Message:”和一个换行符
+            char *sendstr = (char *)malloc(sizeof(char) * (strlen(message[i]) + 32)); //+32是为了在开头加上“Message:”和末尾加一个换行符
             if (!sendstr)
             {
                 perror("malloc");
@@ -56,14 +67,10 @@ void *handle_chat(void *data)
             strcpy(sendstr, "Message:");
             strcat(sendstr, message[i]);
             strcat(sendstr, "\n");
-            send(pipe->fd_recv, sendstr, strlen(sendstr), 0); //服务端向另一个客户端发送刚接收的信息；向fd_recv发送buffer中的数据(含print功能)，这里len+8是加上“Message”的长度
+            send(pipe->fd_recv, sendstr, strlen(sendstr), 0); //服务端向另一个客户端(fd_recv)发送刚接收的信息
             free(sendstr);
         }
-        /*
-        for (int i = 0; i < mesnum; ++i)
-            free(message[i]);
         free(message);
-        */
     }
     free(buffer);
     buffer = NULL;
@@ -101,7 +108,7 @@ int main(int argc, char **argv)
     }
 
     //接受来自两个客户端的信息，只有两个客户端的请求都接受了(两个accept)才能继续执行下面的代码
-    //nc 127.0.0.1 6666可以看作是一个客户端使用了connect，即向服务端发起请求
+    //输入nc 127.0.0.1 6666即向服务端发起请求
     int fd1 = accept(fd, NULL, NULL);
     int fd2 = accept(fd, NULL, NULL);
     if (fd1 == -1 || fd2 == -1)
